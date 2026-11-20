@@ -1,0 +1,1002 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Графік змін саппорту</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@600&display=swap">
+<style>
+/* Layout: toolbar → "now on shift" strip → one roster table per team, Sunday-first week like the source sheet */
+:root{
+  --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f6; --line:#dde2ea; --fg:#18202e; --muted:#5b6678;
+  --accent:#2f5bd3; --accent-fg:#ffffff; --today:#e7eefd; --today-line:#2f5bd3; --danger:#b42318; --shadow:0 10px 30px rgba(20,32,60,.14);
+  --d-bg:#fcecc0; --d-fg:#6f4c00; --n-bg:#e5e0fa; --n-fg:#45369e; --off-bg:#e2f0e2; --off-fg:#2c6634;
+  --do-bg:#dbe4ed; --do-fg:#38506a; --sick-bg:#fbdfdc; --sick-fg:#9f2419; --vac-bg:#d6f0ec; --vac-fg:#0f625a;
+  --g1:#62a962; --g2:#9583d3; --g3:#619dd6; --g4:#df9a58; --on-g:#ffffff;
+  --font-display:"Unbounded","IBM Plex Sans",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10141b; --surface:#171d27; --surface-2:#202836; --line:#2b3444; --fg:#e5e9f0; --muted:#98a3b6;
+  --accent:#7f9df5; --accent-fg:#0c1220; --today:#1b2640; --today-line:#7f9df5; --danger:#ff8a80; --shadow:0 10px 30px rgba(0,0,0,.5);
+  --d-bg:#47380f; --d-fg:#f4d27c; --n-bg:#2d2754; --n-fg:#c4b9ff; --off-bg:#1d3822; --off-fg:#9dd5a3;
+  --do-bg:#253343; --do-fg:#adc1d5; --sick-bg:#4a1d1a; --sick-fg:#ffaaa2; --vac-bg:#113b37; --vac-fg:#8ddfd4;
+  --g1:#5aa45a; --g2:#8f7ed0; --g3:#5c98d2; --g4:#d39050;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#10141b; --surface:#171d27; --surface-2:#202836; --line:#2b3444; --fg:#e5e9f0; --muted:#98a3b6;
+  --accent:#7f9df5; --accent-fg:#0c1220; --today:#1b2640; --today-line:#7f9df5; --danger:#ff8a80; --shadow:0 10px 30px rgba(0,0,0,.5);
+  --d-bg:#47380f; --d-fg:#f4d27c; --n-bg:#2d2754; --n-fg:#c4b9ff; --off-bg:#1d3822; --off-fg:#9dd5a3;
+  --do-bg:#253343; --do-fg:#adc1d5; --sick-bg:#4a1d1a; --sick-fg:#ffaaa2; --vac-bg:#113b37; --vac-fg:#8ddfd4;
+  --g1:#5aa45a; --g2:#8f7ed0; --g3:#5c98d2; --g4:#d39050;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-size:14px}
+[hidden]{display:none!important}
+img{max-width:100%}
+/* sign-in gate */
+.gate{position:fixed;inset:0;z-index:60;background:var(--bg);display:grid;place-items:center;padding:16px}
+.gate-card{width:min(440px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:28px;display:grid;gap:14px;text-align:center;justify-items:center}
+.gate-card p{margin:0;color:var(--muted)}
+.who{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);font-size:13px}
+.who .em{overflow-wrap:anywhere;color:var(--muted)}
+.who .row{display:flex;gap:6px;flex-wrap:wrap}
+.who .btn{padding:5px 10px;font-size:13px}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1240px;margin:0 auto;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:20px}
+h1{font-family:var(--font-display);font-weight:600;font-size:clamp(20px,3vw,26px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:16px;margin:0}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;font-weight:500;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.icon{padding:7px 10px}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* app shell: sidebar of tiles + page */
+.app{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100%}
+.side{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;height:100dvh;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:24px 16px;background:var(--surface);border-right:1px solid var(--line)}
+.theme{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);font-size:14px;font-weight:500}
+.theme .ti{display:flex;align-items:center;gap:8px}
+.switch{flex:none;width:46px;height:26px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);position:relative;padding:0}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--muted)}
+.switch[aria-checked="true"]{background:var(--accent);border-color:var(--accent)}
+.switch[aria-checked="true"]::after{transform:translateX(20px);background:var(--accent-fg)}
+@media (prefers-reduced-motion:no-preference){.switch::after{transition:transform .18s ease}}
+
+/* people */
+.people-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.person{background:var(--surface);border:1px solid var(--line);border-radius:14px;min-height:300px;display:flex;flex-direction:column;overflow:hidden}
+.ptop{height:88px;background:color-mix(in srgb,var(--gc) 30%,var(--surface));position:relative;flex:none}
+.avatar{position:absolute;left:16px;bottom:-26px;width:58px;height:58px;border-radius:50%;background:var(--gc);color:var(--on-g);display:grid;place-items:center;font-weight:600;font-size:18px;border:3px solid var(--surface)}
+.pbody{padding:34px 16px 16px;display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.pnick{font-family:var(--font-display);font-weight:600;font-size:17px;overflow-wrap:anywhere}
+.pname{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.tbadge{align-self:flex-start;margin-top:6px;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:var(--surface-2)}
+.pfacts{margin:auto 0 0;padding-top:12px;display:grid;gap:8px;border-top:1px solid var(--line)}
+.pfacts div{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
+.pfacts dt{color:var(--muted)}
+.pfacts dd{margin:0;font-family:var(--font-mono);font-size:13px}
+.pfacts .pill{width:auto;min-width:0;padding:2px 10px;font-size:12px}
+.person .btn{margin-top:10px;justify-content:center}
+.person.add{border-style:dashed;align-items:center;justify-content:center;gap:8px;color:var(--muted);background:transparent}
+.person.add:hover{color:var(--accent);border-color:var(--accent)}
+.person.add .plus{font-size:30px;line-height:1}
+.brand{font-family:var(--font-display);font-weight:600;font-size:15px;padding:0 4px 10px}
+.tile{display:grid;grid-template-columns:38px minmax(0,1fr);gap:12px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px}
+.tile:hover{border-color:var(--muted)}
+.tile[aria-current="page"]{border-color:var(--accent);background:var(--today)}
+.tile .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--surface-2);color:var(--muted)}
+.tile[aria-current="page"] .ic{background:var(--accent);color:var(--accent-fg)}
+.tile b{display:block;font-weight:600}
+.tile small{display:block;color:var(--muted);font-size:12px;line-height:1.3}
+.app>.wrap{width:100%;min-width:0}
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side>.tile,.side>.theme,.side>.who{flex:0 0 210px}
+  .theme{margin-top:0}
+  .side{position:static;height:auto;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .brand{display:none}
+}
+
+/* analytics */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:2px}
+.stat .num{font-family:var(--font-display);font-weight:600;font-size:28px;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat .sub{font-size:12px;color:var(--muted)}
+.stat.sick .num{color:var(--sick-fg)} .stat.vac .num{color:var(--vac-fg)} .stat.do .num{color:var(--do-fg)} .stat.extra .num{color:var(--accent)}
+.panel{display:grid;gap:10px}
+.panel-head{display:grid;gap:2px}
+.panel-head .muted{font-size:13px}
+table.atable{min-width:760px}
+.atable th,.atable td{text-align:left;padding:10px 12px;vertical-align:top}
+.atable thead th{font-size:12px}
+.atable td.n,.atable th.n{text-align:center;width:84px;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.dchips{display:flex;flex-wrap:wrap;gap:6px}
+.dchip{border-radius:8px;padding:3px 8px;font-size:12px;background:var(--surface-2);white-space:nowrap}
+.dchip b{font-family:var(--font-mono);font-weight:500}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.top .title{display:grid;gap:4px;min-width:0}
+.week-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.week-label{font-weight:600;font-variant-numeric:tabular-nums;min-width:170px;text-align:center}
+.role{font-size:12px;color:var(--muted)}
+
+/* now strip */
+.now{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.now-block{display:grid;gap:8px;min-width:0}
+.now-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.now-head strong{font-family:var(--font-mono);font-size:14px}
+.now-team{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.now-team .tname{font-size:12px;color:var(--muted);min-width:44px}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:13px;background:var(--surface-2)}
+.chip .dot{width:8px;height:8px;border-radius:50%}
+.muted{color:var(--muted)}
+
+/* filters */
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:var(--surface-2);padding:4px;border-radius:10px}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:7px;font-weight:500;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.search{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;min-width:0;width:240px;max-width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted);align-items:center}
+
+/* notice */
+.notice{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+
+/* roster */
+.team{display:grid;gap:10px}
+.team-head{display:flex;align-items:baseline;gap:10px}
+.scroller{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:separate;border-spacing:0;width:100%;min-width:880px}
+th,td{border-bottom:1px solid var(--line);padding:6px;text-align:center;vertical-align:middle}
+thead th{background:var(--surface-2);font-weight:600;font-size:13px;padding:8px 6px}
+thead th .d{display:block;font-family:var(--font-mono);font-size:12px;color:var(--muted);font-weight:500}
+thead th.is-today{background:var(--today);box-shadow:inset 0 3px 0 var(--today-line)}
+thead th.is-today .d{color:var(--accent)}
+td.is-today{background:var(--today)}
+th.agent{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;min-width:210px;padding:6px 10px 6px 0;font-weight:500}
+thead th.agent{background:var(--surface-2);padding-left:14px}
+.agent-cell{display:flex;align-items:center;gap:10px}
+.stripe{width:4px;align-self:stretch;border-radius:0 3px 3px 0;min-height:30px}
+.agent-cell .nm{display:grid;line-height:1.2;min-width:0}
+.agent-cell .nick{font-weight:600}
+.agent-cell .full{font-size:12px;color:var(--muted)}
+.hours{font-family:var(--font-mono);font-size:13px;color:var(--muted);width:64px}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}
+mark{background:var(--d-bg);color:inherit;border-radius:3px;padding:0 1px}
+
+.pill{display:inline-flex;justify-content:center;align-items:center;width:100%;min-width:92px;border-radius:999px;padding:5px 8px;font-size:13px;font-weight:500;border:1px solid transparent;background:var(--surface-2);color:var(--muted)}
+button.pill:hover{border-color:currentColor}
+.pill.t{font-family:var(--font-mono);font-size:13px}
+.p-d{background:var(--d-bg);color:var(--d-fg)}
+.p-n{background:var(--n-bg);color:var(--n-fg)}
+.p-h{background:var(--d-bg);color:var(--d-fg);border:1px dashed var(--d-fg)}
+.p-off{background:var(--off-bg);color:var(--off-fg)}
+.p-do{background:var(--do-bg);color:var(--do-fg)}
+.p-sick{background:var(--sick-bg);color:var(--sick-fg)}
+.p-vac{background:var(--vac-bg);color:var(--vac-fg)}
+.p-empty{background:transparent;border:1px dashed var(--line)}
+
+table.month{min-width:0}
+table.month thead th:not(.agent),table.month td{padding:4px 2px;min-width:52px}
+table.month thead th{font-size:11px}
+table.month .pill{min-width:0;padding:4px 2px;font-size:11px}
+table.month .swap{padding:4px;font-size:10.5px}
+table.month .swap .x{position:static;padding:0 2px;justify-self:end}
+table.month .add-swap{font-size:11px;padding:2px}
+thead th.we{color:var(--muted)}
+tr.swaps th.agent{font-size:13px;color:var(--muted);padding-left:14px}
+tr.swaps td{vertical-align:top;text-align:left;font-size:12px}
+.swap{display:grid;gap:2px;background:var(--surface-2);border-radius:8px;padding:6px 8px;margin-bottom:4px;position:relative}
+.swap b{font-weight:600}
+.swap .why{color:var(--muted)}
+.swap .x{position:absolute;top:2px;right:2px;border:0;background:transparent;color:var(--muted);padding:2px 6px;border-radius:6px}
+.swap .x:hover{color:var(--danger)}
+.add-swap{border:1px dashed var(--line);background:transparent;border-radius:8px;width:100%;padding:4px;color:var(--muted);font-size:12px}
+.add-swap:hover{color:var(--accent);border-color:var(--accent)}
+
+/* popover */
+#pop{position:absolute;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:8px;display:grid;gap:4px;width:200px}
+#pop .ph{font-size:12px;color:var(--muted);padding:2px 4px 4px}
+#pop button.pill{justify-content:flex-start;padding:7px 12px}
+#pop button.pill[aria-current="true"]{outline:2px solid currentColor;outline-offset:-2px}
+
+/* dialogs */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--fg);padding:0;width:min(640px,calc(100vw - 32px));box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(10,15,25,.45)}
+.dlg{display:grid;gap:16px;padding:20px}
+.dlg-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+.field{display:grid;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+.mprev{background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:13px;display:grid;gap:4px}
+.mprev:empty{display:none}
+.field input,.field select,.field textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%}
+.alist{display:grid;gap:4px;max-height:50vh;overflow:auto}
+.arow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--surface-2)}
+.arow .nm{flex:1;min-width:0;display:grid;line-height:1.2}
+.arow .nm small{color:var(--muted)}
+.arow .btn{padding:4px 8px}
+.dlg-foot{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:40;max-width:calc(100vw - 32px)}
+@media (prefers-reduced-motion:no-preference){.pill,.btn{transition:background-color .12s,border-color .12s}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side" aria-label="Розділи">
+  <div class="brand">Support Hub</div>
+  <button class="tile" data-page="schedule" aria-current="page">
+    <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="3.5" width="15" height="14" rx="2"/><path d="M2.5 8h15M6.5 1.5v4M13.5 1.5v4M6 11.5h2M9 11.5h2M12 11.5h2M6 14.5h2M9 14.5h2"/></svg></span>
+    <span><b>Графік</b><small>Зміни по тижнях і місяцях</small></span>
+  </button>
+  <button class="tile" data-page="analytics">
+    <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 17.5h15"/><rect x="4" y="9" width="3" height="6" rx=".8"/><rect x="8.5" y="5" width="3" height="10" rx=".8"/><rect x="13" y="11" width="3" height="4" rx=".8"/></svg></span>
+    <span><b>Аналітика</b><small>Додаткові зміни та відсутності</small></span>
+  </button>
+  <button class="tile" data-page="people">
+    <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="6.5" r="3"/><path d="M1.8 17c.6-3.2 2.9-5 5.7-5s5.1 1.8 5.7 5"/><circle cx="14" cy="7.5" r="2.3"/><path d="M14.5 12.2c2 .3 3.4 1.9 3.8 4.3"/></svg></span>
+    <span><b>Співробітники</b><small>Люди та їхні команди</small></span>
+  </button>
+  <div class="theme">
+    <span class="ti"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M16.5 12.5A7 7 0 0 1 7.5 3.5a7 7 0 1 0 9 9z"/></svg><span id="theme-label">Темна тема</span></span>
+    <button class="switch" id="theme-sw" role="switch" aria-checked="false" aria-labelledby="theme-label"></button>
+  </div>
+  <div class="who" id="who" hidden>
+    <span class="em" id="who-email"></span>
+    <span class="row"><button class="btn" id="open-access" hidden>Доступ</button><button class="btn" id="logout">Вийти</button></span>
+  </div>
+</aside>
+<div class="wrap" id="page-schedule">
+  <header class="top">
+    <div class="title">
+      <span class="eyebrow">Support · графік змін</span>
+      <h1>Графік змін саппорту</h1>
+      <span class="role" id="role"></span>
+    </div>
+    <div class="week-nav">
+      <div class="seg" id="view" role="group" aria-label="Період"><button data-view="week" aria-pressed="true">Тиждень</button><button data-view="month" aria-pressed="false">Місяць</button></div>
+      <button class="btn icon" id="prev" aria-label="Попередній тиждень">‹</button>
+      <span class="week-label" id="week-label"></span>
+      <button class="btn icon" id="next" aria-label="Наступний тиждень">›</button>
+      <button class="btn" id="today-btn">Сьогодні</button>
+      <span id="edit-tools" hidden>
+        <button class="btn" id="new-month">Новий місяць</button>
+        <button class="btn" id="copy-week">Скопіювати попередній тиждень</button>
+        <button class="btn primary" id="open-agents">Агенти</button>
+      </span>
+    </div>
+  </header>
+
+  <section class="now" id="now" aria-label="Хто на зміні"></section>
+
+  <div class="filters">
+    <div class="seg" id="teams" role="group" aria-label="Команда"></div>
+    <input class="search" id="search" type="search" placeholder="Знайти агента" aria-label="Знайти агента">
+  </div>
+  <div class="legend" id="legend"></div>
+
+  <div id="status"></div>
+  <main id="roster" style="display:grid;gap:24px"></main>
+</div>
+
+<div class="wrap" id="page-analytics" hidden>
+  <header class="top">
+    <div class="title">
+      <span class="eyebrow">Support · аналітика</span>
+      <h1>Аналітика змін</h1>
+      <span class="role">Додаткові зміни та відсутності за місяць</span>
+    </div>
+    <div class="week-nav">
+      <button class="btn icon" id="a-prev" aria-label="Попередній місяць">‹</button>
+      <span class="week-label" id="a-label"></span>
+      <button class="btn icon" id="a-next" aria-label="Наступний місяць">›</button>
+      <button class="btn" id="a-today">Поточний місяць</button>
+    </div>
+  </header>
+  <div class="filters"><div class="seg" id="a-teams" role="group" aria-label="Команда"></div></div>
+  <section class="stats" id="a-stats" aria-label="Підсумки"></section>
+  <section class="panel">
+    <div class="panel-head"><h2>Додаткові зміни</h2><span class="muted">Хто вийшов на заміну колезі. Дані беруться з рядка «Заміни» у графіку.</span></div>
+    <div id="a-extra"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Відсутності</h2><span class="muted">Дей офф, лікарняний, відпустка, а також дні, коли агента замінили з іншої причини.</span></div>
+    <div id="a-absent"></div>
+  </section>
+</div>
+
+<div class="wrap" id="page-people" hidden>
+  <header class="top">
+    <div class="title">
+      <span class="eyebrow">Support · команда</span>
+      <h1>Співробітники</h1>
+      <span class="role" id="p-count"></span>
+    </div>
+    <div class="week-nav">
+      <input class="search" id="p-search" type="search" placeholder="Знайти співробітника" aria-label="Знайти співробітника">
+      <button class="btn primary" id="p-add" hidden>Додати співробітника</button>
+    </div>
+  </header>
+  <div class="filters"><div class="seg" id="p-teams" role="group" aria-label="Команда"></div></div>
+  <main id="people" style="display:grid;gap:28px"></main>
+</div>
+</div>
+
+<dialog id="dlg-month"><div class="dlg">
+  <div class="dlg-head"><h2>Новий місяць</h2><button class="btn icon" data-close aria-label="Закрити">✕</button></div>
+  <div class="form">
+    <label class="field">Місяць<input type="month" id="m-month"></label>
+    <div class="field">Як заповнити<div class="seg" id="m-mode"><button type="button" data-mmode="rot" aria-pressed="true">Продовжити ротацію</button><button type="button" data-mmode="paste" aria-pressed="false">Вставити з таблиці</button></div></div>
+  </div>
+  <p class="muted" id="m-rot" style="margin:0;font-size:13px">Для кожного агента повторюємо його цикл змін за останні шість тижнів. Відпустки, лікарняні та заміни не переносяться.</p>
+  <label class="field" id="m-pastebox" hidden>Скопіюйте в Google Таблиці рядки агентів разом з колонкою імен і вставте сюди. Перша колонка після імені — це 1 число місяця (або дата з рядка заголовка, якщо його теж скопіювати).
+    <textarea id="m-paste" rows="7" placeholder="Yaroslav N (Arnold)&#9;вихідний&#9;08 - 20&#9;…" style="font-family:var(--font-mono);font-size:12px;resize:vertical"></textarea></label>
+  <div class="mprev" id="m-preview"></div>
+  <div class="dlg-foot"><button class="btn" data-close type="button">Скасувати</button><button class="btn primary" id="m-go" type="button">Заповнити місяць</button></div>
+</div></dialog>
+
+<dialog id="dlg-access"><div class="dlg">
+  <div class="dlg-head"><h2>Доступ до графіка</h2><button class="btn icon" data-close aria-label="Закрити">✕</button></div>
+  <p class="muted" style="margin:0;font-size:13px">Люди входять через Google. Хто не має доступу, не побачить жодних даних.</p>
+  <label class="field">Домен компанії: усі з поштою на цьому домені можуть переглядати графік<input id="ac-domain" placeholder="company.com"></label>
+  <label class="field">Редактори (тімліди): по одному email у рядку<textarea id="ac-editors" rows="4" style="font-family:var(--font-mono);font-size:12px"></textarea></label>
+  <label class="field">Глядачі поза доменом: по одному email у рядку<textarea id="ac-viewers" rows="3" style="font-family:var(--font-mono);font-size:12px"></textarea></label>
+  <div class="field">Перенести дані (файл seed.json)<input type="file" id="ac-import" accept="application/json,.json"></div>
+  <div class="mprev" id="ac-msg"></div>
+  <div class="dlg-foot"><button class="btn" data-close type="button">Скасувати</button><button class="btn primary" id="ac-save" type="button">Зберегти доступ</button></div>
+</div></dialog>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <h1>Графік змін саппорту</h1>
+    <p id="gate-msg">Завантаження…</p>
+    <button class="btn primary" id="gate-login" hidden>Увійти через Google</button>
+    <button class="btn" id="gate-logout" hidden>Вийти й увійти з іншої пошти</button>
+  </div>
+</div>
+
+<div id="pop" hidden></div>
+<div id="toast" hidden></div>
+
+<dialog id="dlg-agents"><div class="dlg">
+  <div class="dlg-head"><h2>Агенти</h2><button class="btn icon" data-close aria-label="Закрити">✕</button></div>
+  <div class="alist" id="alist"></div>
+  <form class="form" id="aform">
+    <label class="field">Ім'я та прізвище<input id="f-name" required placeholder="Yaroslav N"></label>
+    <label class="field">Нікнейм<input id="f-nick" required placeholder="Arnold"></label>
+    <label class="field">Команда<input id="f-team" list="team-list" required placeholder="SS"></label>
+    <label class="field">Група<select id="f-group"><option value="1">Група 1 (зелена)</option><option value="2">Група 2 (фіолетова)</option><option value="3">Група 3 (блакитна)</option><option value="4">Група 4 (помаранчева)</option></select></label>
+    <datalist id="team-list"></datalist>
+    <div class="dlg-foot" style="grid-column:1/-1">
+      <button type="button" class="btn" id="f-cancel" hidden>Скасувати</button>
+      <button type="submit" class="btn primary" id="f-submit">Додати агента</button>
+    </div>
+  </form>
+</div></dialog>
+
+<dialog id="dlg-swap"><div class="dlg">
+  <div class="dlg-head"><h2 id="swap-title">Заміна</h2><button class="btn icon" data-close aria-label="Закрити">✕</button></div>
+  <form class="form" id="sform">
+    <label class="field">Хто виходить<select id="s-by" required></select></label>
+    <label class="field">Замість кого<select id="s-for" required></select></label>
+    <label class="field">Причина<input id="s-why" list="why-list" placeholder="дей офф"></label>
+    <datalist id="why-list"><option value="дей офф"><option value="лікарняний"><option value="відпустка"><option value="особисті обставини"></datalist>
+    <div class="field" style="grid-column:1/-1">Тривалість<div class="seg" id="s-mode" style="justify-self:start"><button type="button" data-smode="full" aria-pressed="true">Уся зміна</button><button type="button" data-smode="part" aria-pressed="false">Кілька годин</button></div></div>
+    <label class="field s-part" hidden>З<input type="time" id="s-from" value="08:00"></label>
+    <label class="field s-part" hidden>До<input type="time" id="s-to" value="14:00"></label>
+    <div class="field s-part" hidden>Разом<span id="s-dur" style="color:var(--fg);font-family:var(--font-mono);padding:7px 0">6 год</span></div>
+    <label class="field" id="s-apply-wrap" style="grid-column:1/-1;display:flex;gap:8px;align-items:center;color:var(--fg)"><input type="checkbox" id="s-apply" checked style="width:auto"> Оновити зміни в графіку автоматично</label>
+    <div class="dlg-foot" style="grid-column:1/-1"><button type="submit" class="btn primary">Додати заміну</button></div>
+  </form>
+</div></dialog>
+
+<script>
+const SHIFT={
+  D:{label:"08 – 20",short:"08–20",cls:"d",hours:12,time:true,name:"Денна"},
+  N:{label:"20 – 08",short:"20–08",cls:"n",hours:12,time:true,name:"Нічна"},
+  H:{label:"08 – 17",short:"08–17",cls:"h",hours:9,time:true,name:"Денна 9 год"},
+  OFF:{label:"вихідний",short:"вих",cls:"off",hours:0},
+  DO:{label:"дей офф",short:"д/о",cls:"do",hours:0},
+  SICK:{label:"лікарняний",short:"лік",cls:"sick",hours:0},
+  VAC:{label:"відпустка",short:"відп",cls:"vac",hours:0},
+};
+const MON_NOM=["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
+const DOW_SHORT=["Нд","Пн","Вт","Ср","Чт","Пт","Сб"];
+function monthDays(m){const[y,mo]=m.split("-").map(Number),n=new Date(Date.UTC(y,mo,0)).getUTCDate();return Array.from({length:n},(_,i)=>`${m}-${String(i+1).padStart(2,"0")}`)}
+function addMonths(m,k){const[y,mo]=m.split("-").map(Number);return new Date(Date.UTC(y,mo-1+k,1)).toISOString().slice(0,7)}
+function monthLabel(m){const[y,mo]=m.split("-").map(Number);return`${MON_NOM[mo-1]} ${y}`}
+const CODES=["D","N","H","OFF","DO","SICK","VAC"];
+const DOW=["Неділя","Понеділок","Вівторок","Середа","Четвер","П'ятниця","Субота"];
+const MON=["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
+
+const S={db:null,canEdit:false,agents:[],days:new Map(),gotAgents:false,gotDays:false,fresh:false,status:"loading",page:"schedule",pTeam:"all",pq:"",aMonth:null,aTeam:"all",view:"week",month:null,week:null,team:"all",q:"",confirmCopy:false};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* dates are plain YYYY-MM-DD strings, computed in UTC to avoid timezone drift */
+const parse=s=>{const[y,m,d]=s.split("-").map(Number);return Date.UTC(y,m-1,d)};
+const ymd=t=>new Date(t).toISOString().slice(0,10);
+const addDays=(s,n)=>ymd(parse(s)+n*864e5);
+const dow=s=>new Date(parse(s)).getUTCDay();
+const sundayOf=s=>addDays(s,-dow(s));
+const ddmm=s=>s.slice(8,10)+"/"+s.slice(5,7);
+function kyivNow(){
+  const p={};for(const x of new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Kyiv",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()))p[x.type]=x.value;
+  return{date:`${p.year}-${p.month}-${p.day}`,hour:+p.hour%24,time:`${p.hour}:${p.minute}`};
+}
+function weekLabel(w){
+  const e=addDays(w,6),[,m1,d1]=w.split("-").map(Number),[y2,m2,d2]=e.split("-").map(Number);
+  return m1===m2?`${d1} – ${d2} ${MON[m2-1]} ${y2}`:`${d1} ${MON[m1-1]} – ${d2} ${MON[m2-1]} ${y2}`;
+}
+const weekDays=()=>S.view==="month"?monthDays(S.month):Array.from({length:7},(_,i)=>addDays(S.week,i));
+const shiftOf=(date,id)=>S.days.get(date)?.shifts?.[id]||null;
+const agentById=id=>S.agents.find(a=>a.id===id);
+/* hours worked on a day: the shift itself, plus/minus partial (few-hour) swaps */
+function agentHours(d,id){let h=SHIFT[shiftOf(d,id)]?.hours||0;for(const s of S.days.get(d)?.swaps||[]){if(!s.hours)continue;if(s.by===id)h+=s.hours;if(s.for===id)h-=s.hours}return Math.max(0,h)}
+function hoursBetween(f,t){const[a,b]=f.split(":").map(Number),[c,d]=t.split(":").map(Number);let m=c*60+d-(a*60+b);if(m<=0)m+=1440;return Math.round(m/6)/10}
+const nick=id=>agentById(id)?.nick||"—";
+function teams(){const t=[];for(const a of S.agents)if(!t.includes(a.team))t.push(a.team);return t}
+
+/* ---------- rendering ---------- */
+const PAGES=["schedule","analytics","people"];
+function showPage(){
+  for(const p of PAGES)$("page-"+p).hidden=S.page!==p;
+  for(const t of document.querySelectorAll(".tile")){if(t.dataset.page===S.page)t.setAttribute("aria-current","page");else t.removeAttribute("aria-current")}
+}
+function render(){showPage();if(S.page==="analytics"){renderAnalytics();return}if(S.page==="people"){renderPeople();return}renderHeader();renderNow();renderTeams();renderRoster();renderStatus()}
+
+/* ---------- analytics ---------- */
+const ABS={DO:{label:"дей офф",cls:"do"},SICK:{label:"лікарняний",cls:"sick"},VAC:{label:"відпустка",cls:"vac"},OTHER:{label:"інше",cls:"do"}};
+const REASON_CODE={"дей офф":"DO","лікарняний":"SICK","відпустка":"VAC"};
+function computeAnalytics(){
+  const inTeam=a=>S.aTeam==="all"||a.team===S.aTeam,extra=new Map(),absent=new Map();
+  const push=(m,id,v)=>{if(!m.has(id))m.set(id,[]);m.get(id).push(v)};
+  for(const d of monthDays(S.aMonth)){
+    const day=S.days.get(d);if(!day)continue;
+    const swaps=day.swaps||[];
+    for(const s of swaps){const a=agentById(s.by);if(a&&inTeam(a))push(extra,a.id,{date:d,for:s.for,reason:s.reason||"",code:shiftOf(d,s.by),part:s.hours?s:null})}
+    for(const a of S.agents){
+      if(!inTeam(a))continue;
+      const c=shiftOf(d,a.id),cov=swaps.filter(s=>s.for===a.id);
+      let type=null,reason="";
+      if(c==="DO"||c==="SICK"||c==="VAC")type=c;
+      else if(cov.length){reason=cov[0].reason||"";type=REASON_CODE[reason.toLowerCase()]||"OTHER"}
+      if(type)push(absent,a.id,{date:d,type,reason,by:cov.map(s=>s.by),hours:cov.reduce((n,s)=>n+(s.hours||0),0)});
+    }
+  }
+  return{extra,absent};
+}
+function agentCell(a){return`<th class="agent"><div class="agent-cell"><span class="stripe" style="background:var(--g${a.group||1})"></span><span class="nm"><span class="nick">${esc(a.nick)}</span><span class="full">${esc(a.name)} · ${esc(a.team)}</span></span></div></th>`}
+function renderAnalytics(){
+  $("a-label").textContent=monthLabel(S.aMonth);
+  const ts=teams();if(S.aTeam!=="all"&&!ts.includes(S.aTeam))S.aTeam="all";
+  $("a-teams").innerHTML=["all",...ts].map(t=>`<button data-ateam="${esc(t)}" aria-pressed="${S.aTeam===t}">${t==="all"?"Усі команди":esc(t)}</button>`).join("");
+  if(!S.gotAgents||!S.gotDays){$("a-stats").innerHTML="";$("a-extra").innerHTML=`<div class="notice"><span class="muted">${S.db?"Завантаження…":"Дані недоступні в цьому перегляді."}</span></div>`;$("a-absent").innerHTML="";return}
+  const{extra,absent}=computeAnalytics();
+  const all=l=>[...l.values()].flat();
+  const exH=r=>r.part?r.part.hours:(SHIFT[r.code]?.hours||0);
+  const ex=all(extra),ab=all(absent),hrs=ex.reduce((n,r)=>n+exH(r),0);
+  const cnt={DO:0,SICK:0,VAC:0,OTHER:0};for(const r of ab)cnt[r.type]++;
+  const stat=(cls,num,lab,sub)=>`<div class="stat ${cls}"><span class="eyebrow">${lab}</span><span class="num">${num}</span><span class="sub">${sub}</span></div>`;
+  $("a-stats").innerHTML=
+    stat("extra",ex.length,"Додаткові зміни",`${hrs} год · ${extra.size} ${plural(extra.size)}`)+
+    stat("",ab.length,"Днів відсутності",`${absent.size} ${plural(absent.size)}`)+
+    stat("sick",cnt.SICK,"Лікарняний","днів")+
+    stat("vac",cnt.VAC,"Відпустка","днів")+
+    stat("do",cnt.DO,"Дей офф","днів")+
+    (cnt.OTHER?stat("",cnt.OTHER,"Інше","днів"):"");
+  const sortBy=m=>[...m.entries()].map(([id,l])=>[agentById(id),l]).filter(([a])=>a).sort((x,y)=>y[1].length-x[1].length||(x[0].order||0)-(y[0].order||0));
+  const er=sortBy(extra);
+  $("a-extra").innerHTML=er.length?`<div class="scroller"><table class="atable"><thead><tr><th class="agent">Агент</th><th class="n">Змін</th><th class="n">Годин</th><th>Дні та за кого</th></tr></thead><tbody>${er.map(([a,l])=>`<tr>${agentCell(a)}<td class="n">${l.length}</td><td class="n">${l.reduce((n,r)=>n+exH(r),0)}</td><td><div class="dchips">${l.map(r=>`<span class="dchip"><b>${ddmm(r.date)}</b>${r.part?` · ${esc(r.part.from)}–${esc(r.part.to)} (${r.part.hours} год)`:r.code&&SHIFT[r.code]?.time?` · ${SHIFT[r.code].label}`:""} · за ${esc(nick(r.for))}${r.reason?` (${esc(r.reason)})`:""}</span>`).join("")}</div></td></tr>`).join("")}</tbody></table></div>`
+    :`<div class="notice"><span>У цьому місяці додаткових змін не було.</span></div>`;
+  const ar=sortBy(absent);
+  $("a-absent").innerHTML=ar.length?`<div class="scroller"><table class="atable"><thead><tr><th class="agent">Агент</th><th class="n">Дей офф</th><th class="n">Лікарн.</th><th class="n">Відпустка</th><th class="n">Усього</th><th>Дні та причина</th></tr></thead><tbody>${ar.map(([a,l])=>{const c=t=>l.filter(r=>r.type===t).length||"—";return`<tr>${agentCell(a)}<td class="n">${c("DO")}</td><td class="n">${c("SICK")}</td><td class="n">${c("VAC")}</td><td class="n">${l.length}</td><td><div class="dchips">${l.map(r=>`<span class="dchip p-${ABS[r.type].cls}"><b>${ddmm(r.date)}</b> · ${r.type==="OTHER"?esc(r.reason||"інше"):ABS[r.type].label}${r.hours?` · ${r.hours} год`:""}${r.by.length?` · замінив ${r.by.map(id=>esc(nick(id))).join(", ")}`:""}</span>`).join("")}</div></td></tr>`}).join("")}</tbody></table></div>`
+    :`<div class="notice"><span>У цьому місяці відсутностей не було.</span></div>`;
+}
+/* ---------- people ---------- */
+const initials=n=>n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join("");
+function renderPeople(){
+  const ts=teams();if(S.pTeam!=="all"&&!ts.includes(S.pTeam))S.pTeam="all";
+  $("p-teams").innerHTML=["all",...ts].map(t=>`<button data-pteam="${esc(t)}" aria-pressed="${S.pTeam===t}">${t==="all"?"Усі команди":esc(t)}</button>`).join("");
+  $("p-add").hidden=!S.canEdit;
+  const root=$("people");
+  if(!S.gotAgents){$("p-count").textContent="";root.innerHTML=`<div class="notice"><span class="muted">${S.db?"Завантаження…":"Дані недоступні в цьому перегляді."}</span></div>`;return}
+  $("p-count").textContent=`${S.agents.length} ${plural(S.agents.length).replace("агент","співробітник").replace("співробітники","співробітники")} у ${ts.length} ${ts.length===1?"команді":"командах"}`;
+  const k=kyivNow(),mDays=monthDays(k.date.slice(0,7)),q=S.pq;
+  let html="";
+  for(const t of ts){
+    if(S.pTeam!=="all"&&S.pTeam!==t)continue;
+    const list=S.agents.filter(a=>a.team===t&&(!q||a.nick.toLowerCase().includes(q)||a.name.toLowerCase().includes(q)));
+    if(!list.length)continue;
+    const cards=list.map(a=>{
+      const c=shiftOf(k.date,a.id),s=c&&SHIFT[c],hrs=mDays.reduce((n,d)=>n+agentHours(d,a.id),0);
+      return`<article class="person" style="--gc:var(--g${a.group||1})"><div class="ptop"><span class="avatar" aria-hidden="true">${esc(initials(a.name)||a.nick[0])}</span></div>
+        <div class="pbody"><span class="pnick">${esc(a.nick)}</span><span class="pname">${esc(a.name)}</span><span class="tbadge">${esc(a.team)}</span>
+        <dl class="pfacts"><div><dt>Група</dt><dd>${a.group||1}</dd></div><div><dt>Сьогодні</dt><dd>${s?`<span class="pill p-${s.cls}${s.time?" t":""}">${s.label}</span>`:"—"}</dd></div><div><dt>Годин за місяць</dt><dd>${hrs}</dd></div></dl>
+        ${S.canEdit?`<button class="btn" data-act="edit-agent" data-id="${esc(a.id)}">Змінити</button>`:""}</div></article>`;
+    }).join("");
+    html+=`<section class="team"><div class="team-head"><h2>${esc(t)}</h2><span class="muted" style="font-size:13px">${list.length} ${plural(list.length).replace("агент","співробітник")}</span></div><div class="people-grid">${cards}${S.canEdit&&!q?`<button class="person add" data-act="add-person" data-team="${esc(t)}"><span class="plus">+</span><span>Додати в ${esc(t)}</span></button>`:""}</div></section>`;
+  }
+  root.innerHTML=html||(S.agents.length?`<div class="notice"><span>Нікого не знайдено за запитом «${esc(q)}».</span></div>`:`<div class="notice"><span>${S.canEdit?"Ще немає жодного співробітника. Додайте першого.":"Список співробітників порожній."}</span></div>`);
+}
+function editAgent(id){const a=agentById(id);if(!a)return;if(!$("dlg-agents").open){resetForm();$("dlg-agents").showModal()}editingId=a.id;$("f-name").value=a.name;$("f-nick").value=a.nick;$("f-team").value=a.team;$("f-group").value=a.group||1;renderAgentsDlg();$("f-name").focus()}
+function addPerson(team){openAgents();if(team)$("f-team").value=team;$("f-name").focus()}
+
+function setAMonth(m){S.aMonth=m;try{history.replaceState(null,"","#analytics-"+m)}catch{}render()}
+function goPage(p){
+  closePop();S.page=p;
+  if(p==="analytics"){try{history.replaceState(null,"","#analytics-"+S.aMonth)}catch{}}
+  else if(p==="people"){try{history.replaceState(null,"","#people")}catch{}}
+  else setHash();
+  render();window.scrollTo(0,0);
+}
+
+function renderHeader(){
+  const mv=S.view==="month";
+  $("week-label").textContent=mv?monthLabel(S.month):weekLabel(S.week);
+  $("edit-tools").hidden=!S.canEdit;$("copy-week").hidden=mv;
+  for(const b of $("view").children)b.setAttribute("aria-pressed",String(b.dataset.view===S.view));
+  $("prev").setAttribute("aria-label",mv?"Попередній місяць":"Попередній тиждень");
+  $("next").setAttribute("aria-label",mv?"Наступний місяць":"Наступний тиждень");
+  $("role").textContent=S.db?(S.canEdit?"Режим редагування: натисніть на зміну, щоб змінити її":"Перегляд графіка"):"";
+  const cb=$("copy-week");cb.textContent=S.confirmCopy?"Перезаписати тиждень?":"Скопіювати попередній тиждень";cb.classList.toggle("danger",S.confirmCopy);
+  $("legend").innerHTML=CODES.map(c=>`<span class="pill p-${SHIFT[c].cls}${SHIFT[c].time?" t":""}" style="width:auto;min-width:0">${SHIFT[c].label}</span>`).join("")+`<span>· Час київський · Нічна зміна 20 – 08 закінчується наступного дня</span>`;
+}
+
+function onShift(date,codes){
+  const out={};
+  for(const a of S.agents)if(codes.includes(shiftOf(date,a.id)))(out[a.team]??=[]).push(a);
+  return out;
+}
+function nowBlock(title,sub,date,codes){
+  const g=onShift(date,codes),ts=teams().filter(t=>g[t]);
+  const body=ts.length?ts.map(t=>`<div class="now-team"><span class="tname">${esc(t)}</span>${g[t].map(a=>{const c=shiftOf(date,a.id);return`<span class="chip"><span class="dot" style="background:var(--g${a.group||1})"></span>${esc(a.nick)}${c!==codes[0]?` <span class="muted">${SHIFT[c].label}</span>`:""}</span>`}).join("")}</div>`).join("")
+    :`<span class="muted">На цю зміну нікого не внесено</span>`;
+  return`<div class="now-block"><div class="now-head"><span class="eyebrow">${title}</span><strong>${SHIFT[codes[0]].label}</strong><span class="muted" style="font-size:13px">${sub}</span></div>${body}</div>`;
+}
+function renderNow(){
+  const k=kyivNow();let cur,next;
+  if(k.hour>=8&&k.hour<20){cur=[k.date,k.hour<17?["D","H"]:["D"]];next=[k.date,["N"]]}
+  else if(k.hour>=20){cur=[k.date,["N"]];next=[addDays(k.date,1),["D","H"]]}
+  else{cur=[addDays(k.date,-1),["N"]];next=[k.date,["D","H"]]}
+  const lbl=d=>`${DOW[dow(d)].toLowerCase()}, ${ddmm(d)}`;
+  $("now").innerHTML=nowBlock("Зараз на зміні",`${lbl(cur[0])} · Київ ${k.time}`,cur[0],cur[1])+nowBlock("Наступна зміна",lbl(next[0]),next[0],next[1]);
+}
+
+function renderTeams(){
+  const ts=teams();if(S.team!=="all"&&!ts.includes(S.team))S.team="all";
+  $("teams").innerHTML=["all",...ts].map(t=>`<button data-team="${esc(t)}" aria-pressed="${S.team===t}">${t==="all"?"Усі команди":esc(t)}</button>`).join("");
+}
+
+function hl(text){
+  if(!S.q)return esc(text);
+  const i=text.toLowerCase().indexOf(S.q);
+  return i<0?esc(text):esc(text.slice(0,i))+"<mark>"+esc(text.slice(i,i+S.q.length))+"</mark>"+esc(text.slice(i+S.q.length));
+}
+function pill(date,a){
+  const c=shiftOf(date,a.id),s=c&&SHIFT[c];
+  const cls=s?`p-${s.cls}${s.time?" t":""}`:"p-empty",lab=s?(S.view==="month"?s.short:s.label):(S.canEdit?"+":"—");
+  return S.canEdit
+    ?`<button class="pill ${cls}" data-act="shift" data-date="${date}" data-agent="${esc(a.id)}" aria-label="${esc(a.nick)}, ${ddmm(date)}: ${s?s.label:"не внесено"}">${lab}</button>`
+    :`<span class="pill ${cls}" title="${s?s.label:""}">${lab}</span>`;
+}
+function renderRoster(){
+  const days=weekDays(),today=kyivNow().date,root=$("roster");
+  if(!S.gotAgents){root.innerHTML="";return}
+  if(!S.agents.length){
+    root.innerHTML=`<div class="notice"><span>${S.canEdit?"Ще немає жодного агента. Додайте першого, щоб почати заповнювати графік.":"Графік ще не заповнено."}</span>${S.canEdit?`<button class="btn primary" data-act="agents">Додати агента</button>`:""}</div>`;return;
+  }
+  let html="";
+  const weekEmpty=days.every(d=>!S.days.get(d)||!Object.values(S.days.get(d).shifts||{}).some(Boolean));
+  if(weekEmpty&&S.gotDays){
+    const filled=[...S.days.keys()].filter(d=>Object.values(S.days.get(d).shifts||{}).some(Boolean)).sort();
+    const mv=S.view==="month",lastD=filled.length?filled[filled.length-1]:null;
+    const last=lastD?(mv?lastD.slice(0,7):sundayOf(lastD)):null,cur=mv?S.month:S.week,show=last&&last!==cur;
+    html+=`<div class="notice"><span>На цей ${mv?"місяць":"тиждень"} зміни ще не внесено.${show?` Останній заповнений ${mv?"місяць":"тиждень"}: ${mv?monthLabel(last):weekLabel(last)}.`:""}</span><span style="display:flex;gap:8px;flex-wrap:wrap">${show?`<button class="btn" data-act="goto" data-target="${last}">Перейти</button>`:""}${S.canEdit&&!mv?`<button class="btn primary" data-act="copy">Скопіювати попередній тиждень</button>`:""}</span></div>`;
+  }
+  const mv=S.view==="month";
+  const head=`<thead><tr><th class="agent">Агент</th>${days.map(d=>{const w=dow(d);return`<th class="${d===today?"is-today":""}${mv&&(w===0||w===6)&&d!==today?" we":""}">${mv?DOW_SHORT[w]:DOW[w]}<span class="d">${mv?d.slice(8):ddmm(d)}</span></th>`}).join("")}<th class="hours">Годин</th></tr></thead>`;
+  for(const t of teams()){
+    if(S.team!=="all"&&S.team!==t)continue;
+    const list=S.agents.filter(a=>a.team===t&&(!S.q||a.nick.toLowerCase().includes(S.q)||a.name.toLowerCase().includes(S.q)));
+    if(!list.length)continue;
+    const ids=new Set(S.agents.filter(a=>a.team===t).map(a=>a.id));
+    const rows=list.map(a=>{
+      const hrs=days.reduce((n,d)=>n+agentHours(d,a.id),0);
+      return`<tr><th class="agent"><div class="agent-cell"><span class="stripe" style="background:var(--g${a.group||1})"></span><span class="nm"><span class="nick">${hl(a.nick)}</span><span class="full">${hl(a.name)}</span></span></div></th>${days.map(d=>`<td class="${d===today?"is-today":""}">${pill(d,a)}</td>`).join("")}<td class="hours">${hrs}</td></tr>`;
+    }).join("");
+    const swapRow=`<tr class="swaps"><th class="agent">Заміни</th>${days.map(d=>{
+      const sw=(S.days.get(d)?.swaps||[]).map((s,i)=>[s,i]).filter(([s])=>ids.has(s.for)||ids.has(s.by));
+      return`<td class="${d===today?"is-today":""}">${sw.map(([s,i])=>`<div class="swap"><span><b>${esc(nick(s.by))}</b> за <b>${esc(nick(s.for))}</b></span>${s.hours?`<span class="why">${esc(s.from)}–${esc(s.to)} · ${s.hours} год</span>`:""}${s.reason?`<span class="why">${esc(s.reason)}</span>`:""}${S.canEdit?`<button class="x" data-act="del-swap" data-date="${d}" data-i="${i}" aria-label="Видалити заміну">✕</button>`:""}</div>`).join("")}${S.canEdit?`<button class="add-swap" data-act="add-swap" data-date="${d}" data-team="${esc(t)}">+ заміна</button>`:""}</td>`;
+    }).join("")}<td></td></tr>`;
+    html+=`<section class="team"><div class="team-head"><h2>${esc(t)}</h2><span class="muted" style="font-size:13px">${list.length} ${plural(list.length)}</span></div><div class="scroller"><table class="${S.view}">${head}<tbody>${rows}${S.q?"":swapRow}</tbody></table></div></section>`;
+  }
+  root.innerHTML=html||`<div class="notice"><span>Нікого не знайдено за запитом «${esc(S.q)}».</span></div>`;
+}
+const plural=n=>{const m=n%10,h=n%100;return m===1&&h!==11?"агент":m>=2&&m<=4&&(h<12||h>14)?"агенти":"агентів"};
+
+function renderStatus(){
+  const el=$("status");
+  if(S.status==="nodb")el.innerHTML=`<div class="notice"><span>Графік недоступний. Увійдіть через Google з робочою поштою.</span></div>`;
+  else if(S.status==="slow"&&!S.fresh)el.innerHTML=`<div class="notice"><span>${S.gotAgents?"Не вдається оновити графік, дані можуть бути застарілими.":"Не вдається завантажити графік. Перевірте з'єднання."}</span></div>`;
+  else if(S.status==="error")el.innerHTML=`<div class="notice"><span>З'єднання з графіком перервано. Оновіть сторінку.</span></div>`;
+  else if(!S.gotAgents&&S.db)el.innerHTML=`<div class="notice"><span class="muted">Завантаження графіка…</span></div>`;
+  else el.innerHTML="";
+}
+
+let toastT;
+function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3500)}
+
+/* ---------- writes ---------- */
+const chains=new Map();
+function queue(key,fn){const p=(chains.get(key)||Promise.resolve()).then(fn);chains.set(key,p.catch(()=>{}));return p}
+function writeErr(e){
+  if(e?.code==="permission-denied"||e?.code==="invalid_argument"){S.canEdit=false;render();toast("У вас немає прав на редагування графіка")}
+  else if(e?.code==="resource-exhausted")toast("Перевищено ліміт бази даних, спробуйте пізніше");
+  else toast("Не вдалося зберегти. Спробуйте ще раз");
+}
+function writeDay(date,patch){
+  const cur=S.days.get(date)||{date,shifts:{},swaps:[]};
+  const local={...cur,...patch,shifts:{...(cur.shifts||{}),...(patch.shifts||{})}};
+  S.days.set(date,local);renderRoster();renderNow();
+  return queue("days/"+date,async()=>{
+    const ref=S.db.doc("days/"+date),snap=await ref.get();
+    if(snap.exists){
+      /* Firestore update replaces whole maps, so write each shift as its own field path */
+      const args=[];const FP=firebase.firestore.FieldPath;
+      for(const[k,v]of Object.entries(patch)){
+        if(k==="shifts")for(const[id,c]of Object.entries(v))args.push(new FP("shifts",id),c);
+        else args.push(k,v);
+      }
+      if(args.length)await ref.update(...args);
+    }else await ref.set({date,shifts:{},swaps:[],...patch});
+  }).catch(writeErr);
+}
+const setShift=(date,id,code)=>writeDay(date,{shifts:{[id]:code}});
+
+async function copyPrevWeek(){
+  const days=weekDays(),hasData=days.some(d=>Object.values(S.days.get(d)?.shifts||{}).some(Boolean));
+  if(hasData&&!S.confirmCopy){S.confirmCopy=true;renderHeader();setTimeout(()=>{S.confirmCopy=false;renderHeader()},4000);return}
+  S.confirmCopy=false;
+  for(const d of days){
+    const src=S.days.get(addDays(d,-7))?.shifts||{},shifts={};
+    for(const a of S.agents)shifts[a.id]=src[a.id]||null;
+    await writeDay(d,{shifts});
+  }
+  toast("Зміни скопійовано з попереднього тижня");render();
+}
+
+/* ---------- popover ---------- */
+let popCtx=null;
+function openPop(btn){
+  const{date,agent}=btn.dataset,a=agentById(agent),cur=shiftOf(date,agent),pop=$("pop");
+  popCtx={date,agent};
+  pop.innerHTML=`<div class="ph">${esc(a.nick)} · ${DOW[dow(date)]}, ${ddmm(date)}</div>`+CODES.map(c=>`<button class="pill p-${SHIFT[c].cls}${SHIFT[c].time?" t":""}" data-code="${c}" aria-current="${cur===c}">${SHIFT[c].label}</button>`).join("")+`<button class="pill p-empty" data-code="">Очистити</button>`+`<button class="btn" data-act="part-swap" style="margin-top:4px;justify-content:center;font-size:13px">Заміна на кілька годин</button>`;
+  pop.hidden=false;
+  const r=btn.getBoundingClientRect(),w=pop.offsetWidth,h=pop.offsetHeight;
+  let left=r.left+window.scrollX+r.width/2-w/2;left=Math.max(window.scrollX+8,Math.min(left,window.scrollX+document.documentElement.clientWidth-w-8));
+  let top=r.bottom+window.scrollY+6;if(r.bottom+h+12>window.innerHeight&&r.top>h+12)top=r.top+window.scrollY-h-6;
+  pop.style.left=left+"px";pop.style.top=top+"px";
+  pop.querySelector('[aria-current="true"]')?.focus()||pop.querySelector("button").focus();
+}
+function closePop(){$("pop").hidden=true;popCtx=null}
+
+/* ---------- agents dialog ---------- */
+let editingId=null,confirmDel=null;
+function renderAgentsDlg(){
+  $("team-list").innerHTML=teams().map(t=>`<option value="${esc(t)}">`).join("");
+  $("alist").innerHTML=S.agents.length?S.agents.map((a,i)=>`<div class="arow"><span class="stripe" style="background:var(--g${a.group||1});min-height:28px"></span><span class="nm"><b>${esc(a.nick)}</b><small>${esc(a.name)} · ${esc(a.team)}</small></span>
+    <button class="btn" data-act="mv" data-id="${esc(a.id)}" data-d="-1" ${i===0?"disabled":""} aria-label="Вище">↑</button>
+    <button class="btn" data-act="mv" data-id="${esc(a.id)}" data-d="1" ${i===S.agents.length-1?"disabled":""} aria-label="Нижче">↓</button>
+    <button class="btn" data-act="edit-agent" data-id="${esc(a.id)}">Змінити</button>
+    <button class="btn danger" data-act="del-agent" data-id="${esc(a.id)}">${confirmDel===a.id?"Точно видалити?":"Видалити"}</button></div>`).join("")
+    :`<span class="muted">Список порожній.</span>`;
+  $("f-submit").textContent=editingId?"Зберегти зміни":"Додати агента";$("f-cancel").hidden=!editingId;
+}
+function resetForm(){editingId=null;$("aform").reset();renderAgentsDlg()}
+async function saveAgent(e){
+  e.preventDefault();
+  const data={name:$("f-name").value.trim(),nick:$("f-nick").value.trim(),team:$("f-team").value.trim(),group:+$("f-group").value};
+  if(!data.name||!data.nick||!data.team)return;
+  try{
+    if(editingId){const a=agentById(editingId);await S.db.doc("agents/"+editingId).set({...data,order:a.order});toast("Збережено")}
+    else{const id="a-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      const inTeam=S.agents.filter(a=>a.team===data.team),maxAll=Math.max(0,...S.agents.map(a=>a.order||0));
+      const order=inTeam.length?Math.max(...inTeam.map(a=>a.order||0))+0.5:maxAll+1;
+      await S.db.doc("agents/"+id).set({...data,order});toast(`${data.nick} додано`)}
+    resetForm();
+  }catch(err){writeErr(err)}
+}
+async function moveAgent(id,d){
+  const i=S.agents.findIndex(a=>a.id===id),j=i+d;if(j<0||j>=S.agents.length)return;
+  const a=S.agents[i],b=S.agents[j];
+  try{await S.db.doc("agents/"+a.id).update({order:b.order});await S.db.doc("agents/"+b.id).update({order:a.order})}catch(err){writeErr(err)}
+}
+
+/* ---------- swaps dialog ---------- */
+let swapCtx=null;
+let swapMode="full";
+function updDur(){$("s-dur").textContent=hoursBetween($("s-from").value||"00:00",$("s-to").value||"00:00")+" год"}
+function setSwapMode(m){
+  swapMode=m;for(const b of $("s-mode").children)b.setAttribute("aria-pressed",String(b.dataset.smode===m));
+  for(const el of document.querySelectorAll(".s-part"))el.hidden=m!=="part";
+  $("s-apply-wrap").hidden=m==="part";updDur();
+}
+function openSwap(date,team,o={}){
+  swapCtx={date};
+  $("swap-title").textContent=`Заміна · ${DOW[dow(date)]}, ${ddmm(date)}`;
+  const opt=a=>`<option value="${esc(a.id)}">${esc(a.nick)} (${esc(a.name)})</option>`;
+  const all=[team,...teams().filter(t=>t!==team)].map(t=>`<optgroup label="${esc(t)}">${S.agents.filter(a=>a.team===t).map(opt).join("")}</optgroup>`).join("");
+  $("s-by").innerHTML=all;$("s-for").innerHTML=all;$("s-why").value="";
+  const list=S.agents.filter(a=>a.team===team),forId=o.for||list[1]?.id||list[0]?.id;
+  if(forId)$("s-for").value=forId;
+  const by=list.find(a=>a.id!==forId&&shiftOf(date,a.id)==="OFF")||list.find(a=>a.id!==forId);if(by)$("s-by").value=by.id;
+  if(shiftOf(date,forId)==="N"){$("s-from").value="20:00";$("s-to").value="02:00"}else{$("s-from").value="08:00";$("s-to").value="14:00"}
+  setSwapMode(o.mode||"full");
+  $("dlg-swap").showModal();
+}
+async function saveSwap(e){
+  e.preventDefault();
+  const by=$("s-by").value,forId=$("s-for").value,reason=$("s-why").value.trim(),d=swapCtx.date;
+  if(by===forId){toast("Оберіть двох різних агентів");return}
+  const sw={by,for:forId,reason};
+  if(swapMode==="part"){
+    const f=$("s-from").value,t=$("s-to").value;
+    if(!f||!t||f===t){toast("Вкажіть, з котрої і до котрої години заміна");return}
+    Object.assign(sw,{from:f,to:t,hours:hoursBetween(f,t)});
+  }
+  const swaps=[...(S.days.get(d)?.swaps||[]),sw];
+  const patch={swaps};
+  if(swapMode==="full"&&$("s-apply").checked){
+    const forShift=shiftOf(d,forId);
+    const absent={"дей офф":"DO","лікарняний":"SICK","відпустка":"VAC"}[reason.toLowerCase()]||"OFF";
+    patch.shifts={[by]:forShift&&SHIFT[forShift].time?forShift:shiftOf(d,by),[forId]:absent};
+  }
+  $("dlg-swap").close();
+  await writeDay(d,patch);
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button");
+  if(!$("pop").hidden&&!e.target.closest("#pop")&&!(t&&t.dataset.act==="shift"))closePop();
+  if(!t)return;
+  if(t.closest("#pop")&&t.dataset.code!==undefined&&popCtx){setShift(popCtx.date,popCtx.agent,t.dataset.code||null);closePop();return}
+  if(t.dataset.page&&t.classList.contains("tile")){if(S.page!==t.dataset.page)goPage(t.dataset.page);return}
+  if(t.dataset.ateam!==undefined){S.aTeam=t.dataset.ateam;renderAnalytics();return}
+  if(t.dataset.pteam!==undefined){S.pTeam=t.dataset.pteam;renderPeople();return}
+  if(t.dataset.smode){setSwapMode(t.dataset.smode);return}
+  if(t.dataset.mmode){setMMode(t.dataset.mmode);return}
+  if(t.dataset.view&&t.closest("#view")){
+    const k=kyivNow().date;
+    if(t.dataset.view==="month"&&S.view!=="month")setMonth(weekDays().includes(k)?k.slice(0,7):addDays(S.week,3).slice(0,7));
+    else if(t.dataset.view==="week"&&S.view!=="week")setWeek(k.startsWith(S.month)?k:S.month+"-01");
+    return;
+  }
+  if(t.dataset.team!==undefined&&t.closest("#teams")){S.team=t.dataset.team;renderTeams();renderRoster();return}
+  if(t.hasAttribute("data-close")){t.closest("dialog").close();return}
+  switch(t.dataset.act){
+    case"shift":popCtx&&popCtx.date===t.dataset.date&&popCtx.agent===t.dataset.agent?closePop():openPop(t);break;
+    case"goto":S.view==="month"?setMonth(t.dataset.target):setWeek(t.dataset.target);break;
+    case"copy":copyPrevWeek();break;
+    case"agents":openAgents();break;
+    case"add-swap":openSwap(t.dataset.date,t.dataset.team);break;
+    case"del-swap":{const d=t.dataset.date,sw=[...(S.days.get(d)?.swaps||[])];sw.splice(+t.dataset.i,1);writeDay(d,{swaps:sw});break}
+    case"mv":moveAgent(t.dataset.id,+t.dataset.d);break;
+    case"edit-agent":editAgent(t.dataset.id);break;
+    case"add-person":addPerson(t.dataset.team);break;
+    case"part-swap":{if(!popCtx)break;const{date,agent}=popCtx;closePop();openSwap(date,agentById(agent).team,{for:agent,mode:"part"});break}
+    case"del-agent":{const id=t.dataset.id;if(confirmDel!==id){confirmDel=id;renderAgentsDlg();setTimeout(()=>{if(confirmDel===id){confirmDel=null;renderAgentsDlg()}},4000);break}
+      confirmDel=null;S.db.doc("agents/"+id).delete().then(()=>toast("Агента видалено")).catch(writeErr);break}
+  }
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("pop").hidden)closePop()});
+function openAgents(){resetForm();$("dlg-agents").showModal()}
+$("open-agents").onclick=openAgents;
+$("copy-week").onclick=copyPrevWeek;
+$("aform").addEventListener("submit",saveAgent);
+$("f-cancel").onclick=resetForm;
+$("sform").addEventListener("submit",saveSwap);
+$("search").addEventListener("input",e=>{S.q=e.target.value.trim().toLowerCase();renderRoster()});
+function setHash(){try{history.replaceState(null,"",S.view==="month"?"#m"+S.month:"#w"+S.week)}catch{}}
+function setWeek(w){S.view="week";S.week=sundayOf(w);S.month=addDays(S.week,3).slice(0,7);S.confirmCopy=false;closePop();setHash();render()}
+function setMonth(m){S.view="month";S.month=m;S.confirmCopy=false;closePop();setHash();render()}
+$("prev").onclick=()=>S.view==="month"?setMonth(addMonths(S.month,-1)):setWeek(addDays(S.week,-7));
+$("next").onclick=()=>S.view==="month"?setMonth(addMonths(S.month,1)):setWeek(addDays(S.week,7));
+$("today-btn").onclick=()=>S.view==="month"?setMonth(kyivNow().date.slice(0,7)):setWeek(kyivNow().date);
+/* ---------- new month ---------- */
+let mMode="rot",mPlan=null;
+const filledDays=()=>[...S.days.keys()].filter(d=>Object.values(S.days.get(d).shifts||{}).some(Boolean)).sort();
+function defaultNewMonth(){
+  const f=filledDays();if(!f.length)return kyivNow().date.slice(0,7);
+  const lm=f[f.length-1].slice(0,7),n=f.filter(d=>d.startsWith(lm)).length;
+  return n<monthDays(lm).length/2?lm:addMonths(lm,1);
+}
+function openMonthDlg(){$("m-month").value=defaultNewMonth();$("m-paste").value="";setMMode("rot");$("dlg-month").showModal()}
+function setMMode(m){mMode=m;for(const b of $("m-mode").children)b.setAttribute("aria-pressed",String(b.dataset.mmode===m));$("m-rot").hidden=m!=="rot";$("m-pastebox").hidden=m!=="paste";planMonth()}
+function rotationPlan(month){
+  const days=monthDays(month),start=days[0],H=42,REG=new Set(["D","N","H","OFF"]),plan={},ok=[],fail=[];
+  for(const a of S.agents){
+    const seq=[];
+    for(let i=H;i>=1;i--){const d=addDays(start,-i),c=shiftOf(d,a.id),sw=(S.days.get(d)?.swaps||[]).some(s=>s.by===a.id||s.for===a.id);seq.push(!sw&&REG.has(c)?c:null)}
+    let best=null,bestR=1;
+    for(const p of[7,8,14,16,21,28]){
+      let m=0,c=0;for(let j=p;j<H;j++){const x=seq[j],y=seq[j-p];if(x&&y)x===y?m++:c++}
+      if(m>=p){const r=c/(m+c);if(r<=0.1&&r<bestR-1e-9){best=p;bestR=r}}
+    }
+    if(!best){fail.push(a);continue}
+    ok.push(a);
+    days.forEach((d,k)=>{let v=null;for(let b=H+k-best;b>=0;b-=best)if(seq[b]){v=seq[b];break}seq.push(v);if(v)(plan[d]??={})[a.id]=v});
+  }
+  return{plan,ok,fail};
+}
+const CODE_TEXT={"08-20":"D","8-20":"D","20-08":"N","20-8":"N","08-17":"H","8-17":"H","вихідний":"OFF","вих":"OFF","дейофф":"DO","д/о":"DO","лікарняний":"SICK","лік":"SICK","відпустка":"VAC","відп":"VAC"};
+function parseCode(v){if(!v)return null;const n=v.toLowerCase().replace(/[–—]/g,"-").replace(/\s+/g,"");return n?(CODE_TEXT[n]||"?"):null}
+function matchAgent(cell){
+  const c=cell.trim().toLowerCase(),nk=(c.match(/\(([^)]+)\)\s*$/)||[])[1],nm=c.replace(/\([^)]*\)\s*$/,"").trim();
+  return S.agents.find(a=>a.nick.toLowerCase()===(nk||c))||S.agents.find(a=>a.name.toLowerCase()===nm)||S.agents.find(a=>a.nick.toLowerCase()===nm);
+}
+function parsePaste(text,month){
+  const rows=text.split(/\r?\n/).map(r=>r.split("\t")),plan={},missing=[],unknown=new Set(),seen=new Set();
+  let start=month+"-01",first=null,last=null;
+  const hdr=rows.find(r=>/^\d{1,2}[./]\d{1,2}$/.test((r[1]||"").trim()));
+  if(hdr){const[dd,mm]=hdr[1].trim().split(/[./]/).map(Number);if(mm===+month.slice(5,7))start=`${month}-${String(dd).padStart(2,"0")}`}
+  for(const r of rows){
+    const name=(r[0]||"").trim();if(!name)continue;
+    const vals=r.slice(1).map(v=>v.trim()),codes=vals.map(parseCode);
+    if(!codes.some(c=>c&&c!=="?"))continue;
+    const a=matchAgent(name);if(!a){missing.push(name);continue}
+    seen.add(a.id);
+    codes.forEach((c,i)=>{if(c==="?")unknown.add(vals[i]);else if(c){const d=addDays(start,i);(plan[d]??={})[a.id]=c;if(!first||d<first)first=d;if(!last||d>last)last=d}});
+  }
+  return{plan,found:seen.size,missing,unknown:[...unknown],range:first?[first,last]:null};
+}
+function planMonth(){
+  const month=$("m-month").value,prev=$("m-preview"),btn=$("m-go");mPlan=null;btn.disabled=true;
+  if(!/^\d{4}-\d{2}$/.test(month)){prev.innerHTML="";return}
+  const notes=[];let plan;
+  if(mMode==="rot"){
+    const r=rotationPlan(month);plan=r.plan;
+    notes.push(`Цикл знайдено для ${r.ok.length} з ${S.agents.length}.`);
+    if(r.fail.length)notes.push(`Не вдалося визначити цикл: ${r.fail.map(a=>esc(a.nick)).join(", ")}. Цим людям внесіть зміни вручну.`);
+  }else{
+    if(!$("m-paste").value.trim()){prev.innerHTML=`<span class="muted">Вставте рядки з таблиці, і тут з'явиться попередній перегляд.</span>`;return}
+    const r=parsePaste($("m-paste").value,month);plan=r.plan;
+    notes.push(`Розпізнано ${r.found} ${plural(r.found)}${r.range?`, дні ${ddmm(r.range[0])} – ${ddmm(r.range[1])}`:""}.`);
+    if(r.missing.length)notes.push(`Немає у списку співробітників: ${r.missing.map(esc).join(", ")}. Спершу додайте їх на сторінці «Співробітники».`);
+    if(r.unknown.length)notes.push(`Невідомі значення, їх пропущено: ${r.unknown.slice(0,8).map(v=>"«"+esc(v)+"»").join(", ")}.`);
+  }
+  const dates=Object.keys(plan),cells=dates.reduce((n,d)=>n+Object.keys(plan[d]).length,0);
+  const existing=dates.filter(d=>Object.values(S.days.get(d)?.shifts||{}).some(Boolean)).length;
+  if(existing)notes.push(`Увага: у ${existing} дн. уже є зміни. Для цих агентів їх буде замінено.`);
+  prev.innerHTML=`<b>${cells} змін на ${dates.length} дн.</b>`+notes.map(n=>`<div>${n}</div>`).join("");
+  if(cells){mPlan={month,plan};btn.disabled=false}
+}
+async function fillMonth(){
+  if(!mPlan)return;const{month,plan}=mPlan,btn=$("m-go");
+  btn.disabled=true;btn.textContent="Заповнюю…";
+  for(const d of Object.keys(plan).sort())await writeDay(d,{shifts:plan[d]});
+  btn.textContent="Заповнити місяць";$("dlg-month").close();
+  toast(`${monthLabel(month)}: графік заповнено`);setMonth(month);
+}
+$("new-month").onclick=openMonthDlg;
+$("m-month").addEventListener("input",planMonth);
+$("m-paste").addEventListener("input",planMonth);
+$("m-go").onclick=fillMonth;
+$("s-from").addEventListener("input",updDur);
+$("s-to").addEventListener("input",updDur);
+
+$("p-search").addEventListener("input",e=>{S.pq=e.target.value.trim().toLowerCase();renderPeople()});
+$("p-add").onclick=()=>addPerson("");
+
+/* theme switch: explicit choice overrides the system theme; remembered per viewer */
+const DARK_MQ=matchMedia("(prefers-color-scheme: dark)");
+function effectiveDark(){const t=document.documentElement.getAttribute("data-theme");return t?t==="dark":DARK_MQ.matches}
+function syncTheme(){const d=effectiveDark();$("theme-sw").setAttribute("aria-checked",String(d));$("theme-label").textContent=d?"Темна тема":"Світла тема"}
+try{const t=localStorage.getItem("theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch{}
+$("theme-sw").onclick=()=>{const t=effectiveDark()?"light":"dark";document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem("theme",t)}catch{}syncTheme()};
+DARK_MQ.addEventListener("change",syncTheme);
+new MutationObserver(syncTheme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+syncTheme();
+
+$("a-prev").onclick=()=>setAMonth(addMonths(S.aMonth,-1));
+$("a-next").onclick=()=>setAMonth(addMonths(S.aMonth,1));
+$("a-today").onclick=()=>setAMonth(kyivNow().date.slice(0,7));
+function applyHash(){
+  const h=location.hash,w=h.match(/^#w(\d{4}-\d{2}-\d{2})$/),m=h.match(/^#m(\d{4}-\d{2})$/),a=h.match(/^#analytics(?:-(\d{4}-\d{2}))?$/);
+  if(a){S.page="analytics";if(a[1])S.aMonth=a[1];closePop();render();return true}
+  if(h==="#people"){S.page="people";closePop();render();return true}
+  if(m){S.page="schedule";setMonth(m[1]);return true}
+  if(w){S.page="schedule";setWeek(w[1]);return true}
+  return false;
+}
+window.addEventListener("hashchange",applyHash);
+setInterval(()=>{renderNow()},60000);
+
+/* ---------- boot ---------- */
+(async()=>{
+  const k=kyivNow().date;
+  S.week=sundayOf(k);S.month=k.slice(0,7);S.aMonth=k.slice(0,7);
+  if(!applyHash())render();
+
+  const CFG=window.APP_CONFIG||{},fc=CFG.firebase||{};
+  const gate=(msg,{login=false,logout=false}={})=>{$("gate").hidden=false;$("gate-msg").textContent=msg;$("gate-login").hidden=!login;$("gate-logout").hidden=!logout};
+  if(typeof firebase==="undefined"){gate("Не вдалося завантажити Firebase. Перевірте інтернет і оновіть сторінку.");return}
+  if(!fc.apiKey||/ВСТАВ/.test(fc.apiKey)){gate("Сайт ще не налаштовано: заповніть файл config.js (див. ІНСТРУКЦІЯ.md).");return}
+  firebase.initializeApp(fc);
+  const auth=firebase.auth(),db=firebase.firestore();
+  const owner=String(CFG.ownerEmail||"").trim().toLowerCase();
+  let unsubs=[],timer=null;
+  $("gate-login").onclick=()=>auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>{if(e.code!=="auth/popup-closed-by-user"&&e.code!=="auth/cancelled-popup-request")gate("Не вдалося увійти: "+(e.message||e.code),{login:true})});
+  $("gate-logout").onclick=$("logout").onclick=()=>auth.signOut();
+
+  /* access dialog: editors manage who can view/edit, and import seed data */
+  let access={domain:"",editors:[],viewers:[]};
+  const lines=s=>s.split(/[\s,;]+/).map(x=>x.trim().toLowerCase()).filter(x=>x.includes("@"));
+  $("open-access").onclick=()=>{
+    $("ac-domain").value=access.domain||"";$("ac-editors").value=(access.editors||[]).join("\n");$("ac-viewers").value=(access.viewers||[]).join("\n");
+    $("ac-msg").textContent="";$("ac-import").value="";$("dlg-access").showModal();
+  };
+  $("ac-save").onclick=async()=>{
+    const data={domain:$("ac-domain").value.trim().toLowerCase().replace(/^@/,""),editors:lines($("ac-editors").value),viewers:lines($("ac-viewers").value)};
+    try{await db.doc("access/main").set(data);access=data;$("dlg-access").close();toast("Доступ збережено")}
+    catch(e){$("ac-msg").textContent="Не вдалося зберегти: "+(e.code==="permission-denied"?"немає прав редактора":e.message)}
+  };
+  $("ac-import").onchange=async e=>{
+    const f=e.target.files[0];if(!f)return;const msg=$("ac-msg");
+    try{
+      const data=JSON.parse(await f.text()),agents=Object.entries(data.agents||{}),days=Object.entries(data.days||{});
+      if(!agents.length&&!days.length){msg.textContent="У файлі немає даних графіка.";return}
+      msg.textContent=`Переношу ${agents.length} співробітників і ${days.length} днів…`;
+      const all=[...agents.map(([id,d])=>["agents/"+id,d]),...days.map(([id,d])=>["days/"+id,d])];
+      for(let i=0;i<all.length;i+=400){const b=db.batch();for(const[p,d]of all.slice(i,i+400))b.set(db.doc(p),d);await b.commit()}
+      msg.textContent=`Готово: перенесено ${agents.length} співробітників і ${days.length} днів.`;
+    }catch(err){msg.textContent="Не вдалося перенести: "+(err.code==="permission-denied"?"немає прав редактора":err.message)}
+  };
+
+  auth.onAuthStateChanged(async u=>{
+    unsubs.forEach(f=>f());unsubs=[];clearTimeout(timer);
+    S.db=null;S.canEdit=false;S.agents=[];S.days=new Map();S.gotAgents=S.gotDays=S.fresh=false;S.status="loading";
+    $("who").hidden=!u;
+    if(!u){gate("Увійдіть через Google з робочою поштою, щоб переглянути графік.",{login:true});return}
+    const email=(u.email||"").toLowerCase();
+    $("who-email").textContent=email;
+    try{const a=await db.doc("access/main").get();if(a.exists)access={domain:"",editors:[],viewers:[],...a.data()}}catch{}
+    S.canEdit=email===owner||(access.editors||[]).includes(email);
+    $("open-access").hidden=!S.canEdit;
+    S.db=db;$("gate").hidden=true;render();
+    timer=setTimeout(()=>{if(!S.fresh){S.status="slow";renderStatus()}},10000);
+    const fresh=meta=>{if(!meta.fromCache&&S.gotAgents&&S.gotDays&&!S.fresh){S.fresh=true;clearTimeout(timer);S.status="ok"}};
+    const fail=e=>{clearTimeout(timer);
+      if(e?.code==="permission-denied")gate(`У пошти ${email} немає доступу до графіка. Попросіть тімліда додати вас.`,{logout:true});
+      else{S.status="error";renderStatus()}};
+    unsubs.push(db.collection("agents").onSnapshot(snap=>{
+      S.agents=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+      S.gotAgents=true;fresh(snap.metadata);render();
+      if($("dlg-agents").open)renderAgentsDlg();
+    },fail));
+    unsubs.push(db.collection("days").onSnapshot(snap=>{
+      S.days=new Map(snap.docs.map(d=>[d.id,d.data()]));
+      S.gotDays=true;fresh(snap.metadata);render();
+    },fail));
+  });
+})();
+</script>
+</body>
+</html>

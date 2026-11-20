@@ -1,0 +1,36 @@
+rules_version = '2';
+// Правила доступу до графіка. Скопіюйте весь цей текст у Firebase → Firestore Database → Rules.
+// Замініть OWNER_EMAIL на свою пошту (маленькими літерами), так само як у config.js.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function email() { return request.auth.token.email.lower(); }
+    function isOwner() { return signedIn() && email() == 'OWNER_EMAIL'; }
+    function hasAccess() { return exists(/databases/$(database)/documents/access/main); }
+    function acc() { return get(/databases/$(database)/documents/access/main).data; }
+    function isEditor() {
+      return isOwner() || (signedIn() && hasAccess() && email() in acc().get('editors', []));
+    }
+    function isViewer() {
+      return isEditor() || (signedIn() && hasAccess() && (
+        email() in acc().get('viewers', []) ||
+        (acc().get('domain', '') != '' && email().matches('.*@' + acc().get('domain', '')))
+      ));
+    }
+
+    // Список доступу: читає команда; змінюють лише редактори.
+    match /access/main {
+      allow read: if isViewer();
+      allow write: if isEditor();
+    }
+    // Співробітники та дні графіка: переглядають глядачі, змінюють редактори.
+    match /agents/{id} {
+      allow read: if isViewer();
+      allow write: if isEditor();
+    }
+    match /days/{id} {
+      allow read: if isViewer();
+      allow write: if isEditor();
+    }
+  }
+}
